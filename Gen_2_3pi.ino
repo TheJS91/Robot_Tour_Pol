@@ -1,24 +1,24 @@
 #define INF 9999  //representation for infinity or no connection
 String maze[5][4] = {
-  { "R", "L", "R", "L" },
-  { "B", "", "B", "" },
-  { "T", "", "TR", "L" },
-  { "", "", "R", "L" },
-  { "", "", "R", "L" }
+  { "", "R", "L", "" },
+  { "", "BR", "BL", "" },
+  { "B", "TR", "LT", "B" },
+  { "T", "BR", "BL", "T" },
+  { "", "T", "T", "" }        
 };
 
 
-int orientation = 0;
+int orientation = 2;
 //T-0, R-1, B-2, L-3
-int gateCount = 5;  //VERY IMPORTANT
-int startNode = 15;
-int G1 = 2;
-int G2 = 8;
-int G3 = 0;
-int G4 = 10;
-int G5 = 3;
+int gateCount = 3;  //VERY IMPORTANT
+int startNode = 1;
+int G1 = 3;
+int G2 = 2;
+int G3 = 6;
+int G4 = 6;
+int G5 = 6;
 // int G6 = 0;
-int endNode = 14;
+int endNode = 3;
 
 int endPoints[] = { startNode, G1,G2,G3, G4,G5, endNode };
 
@@ -45,56 +45,67 @@ Motors motors;
 IMU imu;
 //Button A buttonA;
 
-#include "TurnSensor.h"
-
-unsigned long currentMillis;
-unsigned long prevMillis;
-const unsigned long PERIOD = 5;
-
-long countsLeft = 0;
-long countsRight = 0;
-long prevLeft = 0;
-long prevRight = 0;
-
-int ang = 0;
 
 int16_t maxSpeed = 100;
 
 const int CLICKS_PER_ROTATION = 12;
 const float GEAR_RATIO = 29.86F;
 const float WHEEL_DIAMETER = 3.2;
-const float WHEEL_CIRCUMFERENCE = 10.05; //10.0531
-
-float Sl = 0.0F;
-float Sr = 0.0F;
-
-int lastError;
+const float WHEEL_CIRCUMFERENCE = 10.0531; 
 
 
+//GYRO ------------------------------------------------------------------------------------------------------------------------
+const int32_t turnAngle45 = 0x20000000;
+
+// This constant represents a turn of 90 degrees.
+const int32_t turnAngle90 = turnAngle45 * 2;
+
+// This constant represents a turn of approximately 1 degree.
+const int32_t turnAngle1 = (turnAngle45 + 22) / 45;
+/*
+Our convention is that a value of 0x20000000 represents a 45
+degree counter-clockwise rotation.  This means that a uint32_t
+can represent any angle between 0 degrees and 360 degrees.  If
+you cast it to a signed 32-bit integer by writing
+(int32_t)turnAngle, that integer can represent any angle between
+-180 degrees and 180 degrees. */
+uint32_t turnAngle = 0;
+
+// turnRate is the current angular rate of the gyro, in units of
+// 0.07 degrees per second.
+int16_t turnRate;
+
+// This is the average reading obtained from the gyro's Z axis
+// during calibration.
+int16_t gyroOffset;
+
+// This variable helps us keep track of how much time has passed
+// between readings of the gyro.
+uint16_t gyroLastUpdate = 0;
 //DRIVING ------------------------------------------------------------------------------------------------------------------------
+double s1 = 0;
+double s2 = 0;
 
 
 //IR Sensor for Angular Velocity
 
-volatile double eCount = 0;
-volatile double eCount2 = 0;
+volatile int16_t eCount = 0;
+volatile int16_t eCount2 = 0;
 volatile double dT = 0;
 volatile double dT2 = 0;
 
-void count() {
-  eCount++;
-  dT = eCount / 20.0 * PI * 6;
+void countL() {
+  eCount= encoders.getCountsLeft();
+  dT =  (double) eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
   // Serial.println(dT);
 }
-void count2() {
-  eCount2++;
-  dT2 = eCount2 / 20.0 * PI * 6;
+void countR() {
+  eCount2 = encoders.getCountsRight();
+  dT2 = (double) eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
   // Serial.print("\t");
   // Serial.println(dT2);
 }
 
-
-//GYROSCOPE -----------------------------------------------------------------------------------------------------
 
 
 //PATHFINDING
@@ -106,46 +117,37 @@ int currentDistance;  // THIS IS USED TO GLOBALIZE THE ITERATED VALUE FROM THE D
 //For every exit command in every move function, step must increment because the motion is inside of the loop
 // UPDATE dRECORD EVERY TIME TOO
 int step = 0;
-double dRecord = 0;
-double dRecord2 = 0;
 
 void update() {
-  dRecord = dT;
+  encoders.getCountsAndResetLeft();
+  encoders.getCountsAndResetRight();
+  turnSensorReset();
   //dRecord2 = dT2;
   step++;
+  
 }
+
 void go_fwd() {
   //debug
   //Serial.println("forward");
   int intent = currentDistance;
-  mpu6050.update();
-  prevAngle = angle;
-  angle = mpu6050.getAngleZ();
-  if (dT - dRecord >= intent) {
-    go_advance(0, 0);
+  turnSensorUpdate();
+  
+  
+  if (dT >= intent) {
+    motors.setSpeeds(0, 0);
     delay(1000);
     update();
 
   } else {
-  
-
-    int angDif = round((angle - prevAngle) * 500);
-    if (abs(angDif) > 1) {
-      if (angDif > 0) {
-        s2 -= 1;
-        s1 += 1;
-      } else if (angDif < 0) {
-        s2 += 1;
-        s1 -= 1;
-      }
-    }
-    go_advance(s1, s2);
+    motors.setSpeeds(s1, s2);
     // Serial.print(s1);
     // Serial.print("\t");
     // Serial.println(s2);
   }
 }
 void go_bck() {// ONLY OCCURS AT THE END SQUARE
+  /*
   int intent = currentDistance;
   mpu6050.update();
   prevAngle = angle;
@@ -170,60 +172,57 @@ void go_bck() {// ONLY OCCURS AT THE END SQUARE
     // Serial.print(s1);
     // Serial.print("\t");
     // Serial.println(s2);
-  }
+  } */
 }
 
 
 
 void turn_right() {
-  // Serial.println("Turn Right");
-  mpu6050.update();
-  angle = mpu6050.getAngleZ();
-  if (fAngle - angle >= 90.0 + rightAngleOffset) {
-    clockwise(0);
+  Serial.println("Turn Right");
+  turnSensorUpdate();
+  if (turnAngle <= -turnAngle45) {
+    motors.setSpeeds(0,0);
     delay(1000);
     update();
   } else {
     // Serial.print(fAngle);
     // Serial.print("\t");
     // Serial.println(angle);
-    clockwise(100);
+    motors.setSpeeds(s1,-s2);
   }
 }
 void turn_left() {
-  // Serial.println("Turn left");
-  mpu6050.update();
-  angle = mpu6050.getAngleZ();
-  Serial.println(angle);
-  if (angle - fAngle >= 90.0 + leftAngleOffset) {
-    countclockwise(0);
+  Serial.println("Turn Left");
+  turnSensorUpdate();
+  if (turnAngle >= turnAngle45) {
+    motors.setSpeeds(0,0);
     delay(1000);
     update();
   } else {
-
     // Serial.print(fAngle);
     // Serial.print("\t");
     // Serial.println(angle);
-    countclockwise(100);
+    motors.setSpeeds(-s1,s2);
   }
 }
 void fullTurn() {  //will go counterclockwise
-  //Serial.println("Doing full turn");
-  mpu6050.update();
-  angle = mpu6050.getAngleZ();
-  if (angle - fAngle >= 180.0 + fullTurnOffset) {
-    countclockwise(0);
+  Serial.println("FullTurn");
+  turnSensorUpdate();
+  if (turnAngle <= -turnAngle90) {
+    motors.setSpeeds(0,0);
     delay(1000);
     update();
   } else {
-
     // Serial.print(fAngle);
     // Serial.print("\t");
     // Serial.println(angle);
-    countclockwise(100);
+    motors.setSpeeds(s1,-s2);
   }
 }
 
+void stop_Stop(){
+  motors.setSpeeds(0,0);
+}
 
 
 
@@ -237,9 +236,9 @@ int prevNode = -1;
 void emptyFunction() {  //FILLING FUNCTION ARRAY WITH STOP VALUES
   functionArray[0] = go_fwd;
   distance[0] = 11.5+25;
-  for (int i = 1; i < 50; i++) {
+  for (int i = 1; i < 60; i++) {
     functionArray[i] = stop_Stop;
-    distance[i] = 45;//BASE DISTANCE
+    distance[i] = 50;//BASE DISTANCE
   }
 }
 
@@ -255,7 +254,7 @@ void printPath(int parent[], int node) {
 
   //RECORDING NODE PATH TO FUNCTION STEPS
   //Serial.println(node - prevNode);
-  int distanceAdditive = 45; //can Add Calibration Distance 
+  int distanceAdditive = 50; //can Add Calibration Distance 
   switch (node - prevNode) { 
     case -1: //left
       switch(orientation){
@@ -441,8 +440,8 @@ void Path() {
   for (int a = 1; a < gateCount + 2; a++) {
     endNode = endPoints[a];
     startNode = endPoints[a - 1];
-    int parent[28];  // Array to store the path
-    for (int i = 0; i < 28; i++) {
+    int parent[24];  // Array to store the path
+    for (int i = 0; i < 24; i++) {
       parent[i] = -1;  // Initialize all nodes as unvisited
     }
 
@@ -456,6 +455,7 @@ void Path() {
     //route[routeCount-1] = startNode;
     prevNode = startNode;
     while (currentNode != endNode) {
+    Serial.print(currentNode);  
       int minCost = INF;
       for (int i = 0; i < 20; i++) {  //SETTING CURRENT TO NODE IN OPENSET WITH THE LOWEST F COST
         if (openSet[i] == true) {
@@ -528,11 +528,7 @@ void Path() {
   }
 }
 
-
-
-
 void setup() {
-  Serial.begin(57600);
   delay(1000);
 
   turnSensorSetup();
@@ -540,7 +536,7 @@ void setup() {
 
   createMatrix();
   emptyFunction();
-  // Serial.println("got here");
+  Serial.println("got here");
   Path();
   // for(int i = 0; i < 50; i++){
   //   currentDistance = distance[i];
@@ -583,41 +579,6 @@ void loop() {
 }
 
 //Pololu included gyro stuff
-
-const int32_t turnAngle45 = 0x20000000;
-
-// This constant represents a turn of 90 degrees.
-const int32_t turnAngle90 = turnAngle45 * 2;
-
-// This constant represents a turn of approximately 1 degree.
-const int32_t turnAngle1 = (turnAngle45 + 22) / 45;
-
-/* turnAngle is a 32-bit unsigned integer representing the amount
-the robot has turned since the last time turnSensorReset was
-called.  This is computed solely using the Z axis of the gyro, so
-it could be inaccurate if the robot is rotated about the X or Y
-axes.
-
-Our convention is that a value of 0x20000000 represents a 45
-degree counter-clockwise rotation.  This means that a uint32_t
-can represent any angle between 0 degrees and 360 degrees.  If
-you cast it to a signed 32-bit integer by writing
-(int32_t)turnAngle, that integer can represent any angle between
--180 degrees and 180 degrees. */
-uint32_t turnAngle = 0;
-
-// turnRate is the current angular rate of the gyro, in units of
-// 0.07 degrees per second.
-int16_t turnRate;
-
-// This is the average reading obtained from the gyro's Z axis
-// during calibration.
-int16_t gyroOffset;
-
-// This variable helps us keep track of how much time has passed
-// between readings of the gyro.
-uint16_t gyroLastUpdate = 0;
-
 
 // This should be called to set the starting point for measuring
 // a turn.  After calling this, turnAngle will be 0.
