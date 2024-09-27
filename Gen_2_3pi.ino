@@ -29,7 +29,7 @@ int endPoints[] = { startNode, G1,G2,G3, G4,G5, endNode };
 #include <PololuMenu.h>
 
 
-
+/*
 Include Pololu3piPlus32U4IMU.h in one of your cpp/ino files to
 enable IMU functionality.
 */
