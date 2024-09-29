@@ -51,7 +51,7 @@ int16_t maxSpeed = 100;
 const int CLICKS_PER_ROTATION = 12;
 const float GEAR_RATIO = 29.86F;
 const float WHEEL_DIAMETER = 3.2;
-const float WHEEL_CIRCUMFERENCE = 10.0531; 
+const float WHEEL_CIRCUMFERENCE = 10.05; 
 
 
 //GYRO ------------------------------------------------------------------------------------------------------------------------
@@ -83,25 +83,25 @@ int16_t gyroOffset;
 // between readings of the gyro.
 uint16_t gyroLastUpdate = 0;
 //DRIVING ------------------------------------------------------------------------------------------------------------------------
-double s1 = 0;
-double s2 = 0;
+double s1 = 100;
+double s2 = 100;
 
 
 //IR Sensor for Angular Velocity
 
-volatile int16_t eCount = 0;
-volatile int16_t eCount2 = 0;
+volatile double eCount = 0;
+volatile double eCount2 = 0;
 volatile double dT = 0;
 volatile double dT2 = 0;
 
 void countL() {
   eCount= encoders.getCountsLeft();
-  dT =  (double) eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
+  dT = eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
   // Serial.println(dT);
 }
 void countR() {
   eCount2 = encoders.getCountsRight();
-  dT2 = (double) eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
+  dT2 = eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
   // Serial.print("\t");
   // Serial.println(dT2);
 }
@@ -122,6 +122,7 @@ void update() {
   encoders.getCountsAndResetLeft();
   encoders.getCountsAndResetRight();
   turnSensorReset();
+  turnAngle=0;
   //dRecord2 = dT2;
   step++;
   
@@ -132,9 +133,10 @@ void go_fwd() {
   //Serial.println("forward");
   int intent = currentDistance;
   turnSensorUpdate();
+  countL();
+  countR();
   
-  
-  if (dT >= intent) {
+  if (dT >= 10) {
     motors.setSpeeds(0, 0);
     delay(1000);
     update();
@@ -175,7 +177,20 @@ void go_bck() {// ONLY OCCURS AT THE END SQUARE
   } */
 }
 
-
+void turn_left() {
+  Serial.println("Turn Left");
+  turnSensorUpdate();
+  if (turnAngle >= turnAngle45) {
+    motors.setSpeeds(0,0);
+    delay(1000);
+    update();
+  } else {
+    // Serial.print(fAngle);
+    // Serial.print("\t");
+    // Serial.println(angle);
+    motors.setSpeeds(-s1,s2);
+  }
+}
 
 void turn_right() {
   Serial.println("Turn Right");
@@ -191,20 +206,7 @@ void turn_right() {
     motors.setSpeeds(s1,-s2);
   }
 }
-void turn_left() {
-  Serial.println("Turn Left");
-  turnSensorUpdate();
-  if (turnAngle >= turnAngle45) {
-    motors.setSpeeds(0,0);
-    delay(1000);
-    update();
-  } else {
-    // Serial.print(fAngle);
-    // Serial.print("\t");
-    // Serial.println(angle);
-    motors.setSpeeds(-s1,s2);
-  }
-}
+
 void fullTurn() {  //will go counterclockwise
   Serial.println("FullTurn");
   turnSensorUpdate();
@@ -238,22 +240,22 @@ void emptyFunction() {  //FILLING FUNCTION ARRAY WITH STOP VALUES
   distance[0] = 11.5+25;
   for (int i = 1; i < 60; i++) {
     functionArray[i] = stop_Stop;
-    distance[i] = 50;//BASE DISTANCE
+    distance[i] = 45;//BASE DISTANCE
   }
 }
 
 void printPath(int parent[], int node) {
   if (parent[node] == -1) {
-    // Serial.println(node);
+    Serial.println(node);
    // route[routeCount] = node;
     return;
   }
   printPath(parent, parent[node]);
-  // Serial.print(" --> ");
-  // Serial.println(node);
+  Serial.print(" --> ");
+  Serial.println(node);
 
   //RECORDING NODE PATH TO FUNCTION STEPS
-  //Serial.println(node - prevNode);
+  Serial.println(node - prevNode);
   int distanceAdditive = 50; //can Add Calibration Distance 
   switch (node - prevNode) { 
     case -1: //left
@@ -423,13 +425,15 @@ void createMatrix() {
       // }
     }
   }
-  //   for (int a = 0; a < 16; a++) {
-  //   for (int b = 0; b < 16; b++) {
-  //     Serial.print(adjMatrix[a][b]);
-  //     Serial.print("\t");
-  //   }
-  //   Serial.println("");//DEBUG CHECKING
-  // }
+  
+  for (int a = 0; a < 20; a++) {
+    for (int b = 0; b < 20; b++) {
+      Serial.print(adjMatrix[a][b]);
+      Serial.print("\t");
+     }
+     Serial.println("");//DEBUG CHECKING
+   }
+   
 }
 
 int hCost(int node) {
@@ -440,8 +444,8 @@ void Path() {
   for (int a = 1; a < gateCount + 2; a++) {
     endNode = endPoints[a];
     startNode = endPoints[a - 1];
-    int parent[24];  // Array to store the path
-    for (int i = 0; i < 24; i++) {
+    int parent[20];  // Array to store the path
+    for (int i = 0; i < 20; i++) {
       parent[i] = -1;  // Initialize all nodes as unvisited
     }
 
@@ -454,12 +458,10 @@ void Path() {
     openSet[startNode] = 1;
     //route[routeCount-1] = startNode;
     prevNode = startNode;
-    while (currentNode != endNode) {
-    Serial.print(currentNode);  
+    while (currentNode != endNode) { 
       int minCost = INF;
       for (int i = 0; i < 20; i++) {  //SETTING CURRENT TO NODE IN OPENSET WITH THE LOWEST F COST
-        if (openSet[i] == true) {
-
+        if (openSet[i]) {
           if (fCostList[i] <= minCost) {
             minCost = fCostList[i];
             currentNode = i;
@@ -473,33 +475,38 @@ void Path() {
       if (currentNode == endNode) {
         break;
       }
-
-
       //TRAVERSE NEIGHBORS AND CHECK IF THEY ARE IN CLOSED; THEN CHECK IF THE NEW PATH IS
       if (currentNode > 3) {                                                                                        //TOP
-        if (!(closedSet[currentNode - 4]) && adjMatrix[currentNode][currentNode - 4] < 0) {                         //if neighbor is NOT in closed OR IS traversable
+        //Serial.println("got here 1");
+        if (!(closedSet[currentNode - 4]) && adjMatrix[currentNode][currentNode - 4] < 1) {                         //if neighbor is NOT in closed OR IS traversable
+          Serial.println("got here2");
           if (adjMatrix[currentNode][currentNode - 4] < fCostList[currentNode - 4] || !openSet[currentNode - 4]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
             fCostList[currentNode - 4] = adjMatrix[currentNode][currentNode - 4] + hCost(currentNode - 4);
             parent[currentNode - 4] = currentNode;
+            Serial.println("got here3");
             if (!openSet[currentNode - 4]) {
               openSet[currentNode - 4] = true;
+              Serial.println("got here5");
             }
           }
         }
       }
       if (currentNode < 16) {                                                                                       //BOTTOM
-        if (!(closedSet[currentNode + 4]) && adjMatrix[currentNode][currentNode + 4] < 0) {                         //if neighbor is NOT in closed OR IS traversable
+        if (!(closedSet[currentNode + 4]) && adjMatrix[currentNode][currentNode + 4] < 1) {                         //if neighbor is NOT in closed OR IS traversable
+        
           if (adjMatrix[currentNode][currentNode + 4] < fCostList[currentNode + 4] || !openSet[currentNode + 4]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
             fCostList[currentNode + 4] = adjMatrix[currentNode][currentNode + 4] + hCost(currentNode + 4);
             parent[currentNode + 4] = currentNode;
+          
             if (!openSet[currentNode + 4]) {
               openSet[currentNode + 4] = true;
+              Serial.println("got here3");
             }
           }
         }
       }
       if (currentNode % 4 < 3) {                                                                                    //RIGHT
-        if (!(closedSet[currentNode + 1]) && adjMatrix[currentNode][currentNode + 1] < 0) {                         //if neighbor is NOT in closed OR IS traversable
+        if (!(closedSet[currentNode + 1]) && adjMatrix[currentNode][currentNode + 1] < 1) {                         //if neighbor is NOT in closed OR IS traversable
           if (adjMatrix[currentNode][currentNode + 1] < fCostList[currentNode + 1] || !openSet[currentNode + 1]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
             fCostList[currentNode + 1] = adjMatrix[currentNode][currentNode + 1] + hCost(currentNode + 1);
             parent[currentNode + 1] = currentNode;
@@ -510,7 +517,7 @@ void Path() {
         }
       }
       if (currentNode % 4 > 0) {                                                                                    //LEFT
-        if (!(closedSet[currentNode - 1]) && adjMatrix[currentNode][currentNode - 1] < 0) {                         //if neighbor is NOT in closed OR IS traversable
+        if (!(closedSet[currentNode - 1]) && adjMatrix[currentNode][currentNode - 1] < 1) {                         //if neighbor is NOT in closed OR IS traversable
           if (adjMatrix[currentNode][currentNode - 1] < fCostList[currentNode - 1] || !openSet[currentNode - 1]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
             fCostList[currentNode - 1] = adjMatrix[currentNode][currentNode - 1] + hCost(currentNode - 1);
             parent[currentNode - 1] = currentNode;
@@ -522,7 +529,7 @@ void Path() {
       }
     }
     if (currentNode == endNode) {
-      //Serial.print("Path: ");
+      Serial.print("Path: ");
       printPath(parent, endNode);
     }
   }
@@ -536,7 +543,6 @@ void setup() {
 
   createMatrix();
   emptyFunction();
-  Serial.println("got here");
   Path();
   // for(int i = 0; i < 50; i++){
   //   currentDistance = distance[i];
@@ -546,24 +552,23 @@ void setup() {
   //   }
   //   Serial.println("");
   // }
-// for (int i = 0 ; i < 50; i++){
-//   currentDistance = distance[i];
-//     if (functionArray[i] == go_fwd) {
-//     Serial.print("Going fwd ");
-//   } else if (functionArray[i] == turn_right) {
-//     Serial.print("Turning right ");
-//   } else if (functionArray[i] == turn_left) {
-//     Serial.print("Turning left ");
-//   } else if (functionArray[i] == fullTurn) {
-//     Serial.print("Full Turn");
-//   }else if (functionArray[i] == stop_Stop){
-//     Serial.print("Stop");
-//   }else{
-//     Serial.print("Else");
-//   }
-//   Serial.println(currentDistance);
-//   }
-//   Serial.println("finished");
+for (int i = 0 ; i < 50; i++){
+     if (functionArray[i] == go_fwd) {
+     Serial.print("Going fwd ");
+   } else if (functionArray[i] == turn_right) {
+     Serial.print("Turning right ");
+   } else if (functionArray[i] == turn_left) {
+     Serial.print("Turning left ");
+   } else if (functionArray[i] == fullTurn) {
+     Serial.print("Full Turn");
+   }else if (functionArray[i] == stop_Stop){
+     Serial.print("Stop");
+   }else{
+     Serial.print("Else");
+   }
+   Serial.println(currentDistance);
+   }
+   Serial.println("finished");
 delay(5000);
 }
 
