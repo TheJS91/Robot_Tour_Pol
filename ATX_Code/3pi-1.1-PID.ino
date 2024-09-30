@@ -1,24 +1,24 @@
 #define INF 9999  //representation for infinity or no connection
 String maze[5][4] = {
-  { "", "R", "L", "" },
-  { "", "BR", "BL", "" },
-  { "B", "TR", "LT", "B" },
-  { "T", "BR", "BL", "T" },
-  { "", "T", "T", "" }        
+  { "", "", "", "" },
+  { "", "", "", "" },
+  { "", "", "", "" },
+  { "", "", "", "" },
+  { "", "", "", "" }        
 };
 
 
-int orientation = 2;
+int orientation = 0;
 //T-0, R-1, B-2, L-3
 int gateCount = 3;  //VERY IMPORTANT
-int startNode = 1;
-int G1 = 3;
-int G2 = 2;
-int G3 = 6;
-int G4 = 6;
-int G5 = 6;
+int startNode = 18;
+int G1 = 17;
+int G2 = 13;
+int G3 = 14;
+int G4 = 18;
+int G5 = 18;
 // int G6 = 0;
-int endNode = 3;
+int endNode = 18;
 
 int endPoints[] = { startNode, G1,G2,G3, G4,G5, endNode };
 
@@ -83,9 +83,14 @@ int16_t gyroOffset;
 // between readings of the gyro.
 uint16_t gyroLastUpdate = 0;
 //DRIVING ------------------------------------------------------------------------------------------------------------------------
-double s1 = 100;
-double s2 = 100;
-
+double s1min = 30; 
+double s2min = 30;
+double Kpf = 3.5; // to reach the proper distance
+double Kps = 5; //to go straight, only affects right motor
+//turning
+double t1min = 30;
+double t2min = 30;
+double Kpt = 0.20; //for turning
 
 //IR Sensor for Angular Velocity
 
@@ -127,7 +132,8 @@ void update() {
   step++;
   
 }
-
+double d1(){return eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;}
+double d2(){return eCount2 / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;}
 void go_fwd() {
   //debug
   //Serial.println("forward");
@@ -142,7 +148,7 @@ void go_fwd() {
     update();
 
   } else {
-    motors.setSpeeds(s1, s2);
+    motors.setSpeeds( (intent - d1()) * Kpf + s1min, (intent - d1()) * Kpf + s1min - ang() * Kps);
     // Serial.print(s1);
     // Serial.print("\t");
     // Serial.println(s2);
@@ -180,7 +186,7 @@ void go_bck() {// ONLY OCCURS AT THE END SQUARE
 void turn_left() {
   Serial.println("Turn Left");
   turnSensorUpdate();
-  if ((((int32_t)turnAngle >> 16) * 360) >> 16 >= 90) {
+  if (ang() >= 90) {
     motors.setSpeeds(0,0);
     delay(1000);
     update();
@@ -188,29 +194,30 @@ void turn_left() {
     // Serial.print(fAngle);
     // Serial.print("\t");
     // Serial.println(angle);
-    motors.setSpeeds(-s1,s2);
+    motors.setSpeeds(-t1min - abs(90 - (ang())) * Kpt, t2min + abs(90 - (ang())) * Kpt);
   }
 }
 
 void turn_right() {
   Serial.println("Turn Right");
   turnSensorUpdate();
-  if ((((int32_t)turnAngle >> 16) * 360) >> 16 <= -90) {
+  if (ang() <= -90) {
     motors.setSpeeds(0,0);
     delay(1000);
     update();
-  } else {
+  } else {  // -90 < fullTurn < 0
     // Serial.print(fAngle);
     // Serial.print("\t");
     // Serial.println(angle);
-    motors.setSpeeds(s1,-s2);
+    
+    motors.setSpeeds(t1min + abs(90 + (ang())) * Kpt, -t2min - abs(90 + (ang())) * Kpt);
   }
 }
 
-void fullTurn() {  //will go counterclockwise
+void fullTurn() {  //will go clockwise
   Serial.println("FullTurn");
   turnSensorUpdate();
-  if (turnAngle <= -turnAngle90) {
+  if (turnAngle <= -180)  {
     motors.setSpeeds(0,0);
     delay(1000);
     update();
@@ -218,7 +225,7 @@ void fullTurn() {  //will go counterclockwise
     // Serial.print(fAngle);
     // Serial.print("\t");
     // Serial.println(angle);
-    motors.setSpeeds(s1,-s2);
+    motors.setSpeeds(t1min + abs(-90 - ang()) * Kpt, -t2min - abs(-90 - ang()) * Kpt);
   }
 }
 
@@ -237,7 +244,7 @@ int prevNode = -1;
 
 void emptyFunction() {  //FILLING FUNCTION ARRAY WITH STOP VALUES
   functionArray[0] = go_fwd;
-  distance[0] = 11.5+25;
+  distance[0] = 5+25;
   for (int i = 1; i < 60; i++) {
     functionArray[i] = stop_Stop;
     distance[i] = 45;//BASE DISTANCE
@@ -621,7 +628,8 @@ void turnSensorUpdate()
   // = 14680064/17578125 unit/(digit*us)
   turnAngle += (int64_t)d * 14680064 / 17578125;
 }
-
+int32_t ang(){ return ((((int32_t)turnAngle >> 16) * 360) >> 16) * 360.0;
+  }
 /* This should be called in setup() to enable and calibrate the
 gyro.  It uses the display, yellow LED, and button A.  While the
 display shows "Gyro cal", you should be careful to hold the robot
@@ -667,7 +675,7 @@ void turnSensorSetup()
 
   turnSensorUpdate();
   display.gotoXY(0, 0);
-  display.print((((int32_t)turnAngle >> 16) * 360) >> 16);
+  display.print(turnAngle);
   display.print(F("   "));
 
   display.clear();
