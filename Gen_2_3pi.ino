@@ -101,7 +101,7 @@ void countL() {
 }
 void countR() {
   eCount2 = encoders.getCountsRight();
-  dT2 = eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
+  dT2 = eCount2 / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
   // Serial.print("\t");
   // Serial.println(dT2);
 }
@@ -136,7 +136,7 @@ void go_fwd() {
   countL();
   countR();
   
-  if (dT >= 10) {
+  if (eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE >= intent) {
     motors.setSpeeds(0, 0);
     delay(1000);
     update();
@@ -180,7 +180,7 @@ void go_bck() {// ONLY OCCURS AT THE END SQUARE
 void turn_left() {
   Serial.println("Turn Left");
   turnSensorUpdate();
-  if (turnAngle >= turnAngle45) {
+  if ((((int32_t)turnAngle >> 16) * 360) >> 16 >= 90) {
     motors.setSpeeds(0,0);
     delay(1000);
     update();
@@ -195,7 +195,7 @@ void turn_left() {
 void turn_right() {
   Serial.println("Turn Right");
   turnSensorUpdate();
-  if (turnAngle <= -turnAngle45) {
+  if ((((int32_t)turnAngle >> 16) * 360) >> 16 <= -90) {
     motors.setSpeeds(0,0);
     delay(1000);
     update();
