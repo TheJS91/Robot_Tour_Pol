@@ -1,29 +1,35 @@
-/* This demo shows how the 3pi+ can use its gyroscope to detect
-when it is being rotated, and use the motors to resist that
-rotation.
+#define INF 9999  //representation for infinity or no connection
+String maze[5][4] = {
+  { "", "R", "L", "" },
+  { "", "BR", "BL", "" },
+  { "B", "TR", "LT", "B" },
+  { "T", "BR", "BL", "T" },
+  { "", "T", "T", "" }        
+};
 
-Be careful to not move the robot for a few seconds after starting
-it while the gyro is being calibrated.  During the gyro
-calibration, the yellow LED is on and the words "Gyro cal" are
-displayed on the display.
 
-After the gyro calibration is done, press button A to start the
-demo.  If you try to turn the 3pi+, or put it on a surface that
-is turning, it will drive its motors to counteract the turning.
+int orientation = 2;
+//T-0, R-1, B-2, L-3
+int gateCount = 3;  //VERY IMPORTANT
+int startNode = 1;
+int G1 = 3;
+int G2 = 2;
+int G3 = 6;
+int G4 = 6;
+int G5 = 6;
+// int G6 = 0;
+int endNode = 3;
 
-This demo only uses the Z axis of the gyro, so it is possible to
-pick up the 3pi+, rotate it about its X and Y axes, and then put
-it down facing in a new position. */
+int endPoints[] = { startNode, G1,G2,G3, G4,G5, endNode };
 
+
+//Susu ------------------------------------------------------------------------------------------------------------------------
 #include <Wire.h>
 #include <Pololu3piPlus32U4.h>
 #include <PololuMenu.h>
 
-/* The IMU is not fully enabled by default since it depends on the
-Wire library, which uses about 1400 bytes of additional code space
-and defines an interrupt service routine (ISR) that might be
-incompatible with some applications (such as our TWISlave example).
 
+/*
 Include Pololu3piPlus32U4IMU.h in one of your cpp/ino files to
 enable IMU functionality.
 */
@@ -31,9 +37,6 @@ enable IMU functionality.
 
 using namespace Pololu3piPlus32U4;
 
-// Change next line to this if you are using the older 3pi+
-// with a black and green LCD display:
-// LCD display;
 OLED display;
 
 Encoders encoders;
@@ -42,297 +45,16 @@ Motors motors;
 IMU imu;
 //Button A buttonA;
 
-#include "TurnSensor.h"
-
-unsigned long currentMillis;
-unsigned long prevMillis;
-const unsigned long PERIOD = 5;
-
-long countsLeft = 0;
-long countsRight = 0;
-long prevLeft = 0;
-long prevRight = 0;
-
-int ang = 0;
 
 int16_t maxSpeed = 100;
 
 const int CLICKS_PER_ROTATION = 12;
 const float GEAR_RATIO = 29.86F;
 const float WHEEL_DIAMETER = 3.2;
-const float WHEEL_CIRCUMFERENCE = 10.05; //10.0531
+const float WHEEL_CIRCUMFERENCE = 10.05; 
 
-float Sl = 0.0F;
-float Sr = 0.0F;
 
-int lastError;
-
-void setup() {
-  // put your setup code here, to run once:
-
-  Serial.begin(57600);
-  delay(1000);
-
-  turnSensorSetup();
-  turnSensorReset();
-
-  move(50);
-  move(50);
-
-}
-
-void loop() {
-  // put your main code here, to run repeatedly:
-}
-
-void move(float dist) {
-
-  int in = turnAngle;
-  int diff;
-
-  while (Sr < dist) {
-
-    currentMillis = millis();
-
-    if (currentMillis > prevMillis + PERIOD) {
-
-      countsLeft += encoders.getCountsAndResetLeft();
-      countsRight += encoders.getCountsAndResetRight();
-
-      Sl += ((countsLeft - prevLeft) / (CLICKS_PER_ROTATION * GEAR_RATIO) *  WHEEL_CIRCUMFERENCE);
-      Sr += ((countsRight - prevRight) / (CLICKS_PER_ROTATION * GEAR_RATIO) *  WHEEL_CIRCUMFERENCE);
-
-      float subtract = dist - (dist / 70 * 15);
-
-      int rWheel = 40;
-      int lWheel = 40;
-      int newSpeed = 40;
-
-      diff = countsLeft - countsRight;
-
-      if (Sr < dist){
-
-        newSpeed =  max(rWheel, rWheel * (diff / 2) * 1.5);
-
-        motors.setSpeeds(lWheel, newSpeed);
-      } else {
-        motors.setSpeeds(0, 0);
-      }
-
-      prevLeft = countsLeft;
-      prevRight = countsRight;
-      prevMillis = currentMillis;
-
-    }
-
-    turnSensorUpdate();
-    display.gotoXY(0, 0);
-    display.print(diff);
-    display.print(F("   "));
-
-  }
-
-  delay(2000);
-
-  Sr = 0.0F;
-  Sl = 0.0F;
-  countsLeft = 0;
-  countsRight = 0;
-  prevLeft = 0;
-  prevRight = 0;
-  prevMillis = 0;
-  currentMillis = 0;
-
-
-}
-
-void t() {
-
-  float dist = 6.485;
-
-  while (Sr < dist) {
-
-    currentMillis = millis();
-
-    if (currentMillis > prevMillis + PERIOD) {
-
-      countsLeft += encoders.getCountsAndResetLeft();
-      countsRight += encoders.getCountsAndResetRight();
-
-      Sl += ((countsLeft - prevLeft) / (CLICKS_PER_ROTATION * GEAR_RATIO) *  WHEEL_CIRCUMFERENCE);
-      Sr += ((countsRight - prevRight) / (CLICKS_PER_ROTATION * GEAR_RATIO) *  WHEEL_CIRCUMFERENCE);
-
-      int wheelSpeed = 35;
-      float subtract = dist - (dist / 10 * 15);
-
-      if (Sr < dist){
-        if (Sr > subtract) {
-          wheelSpeed = 35 * ((15 - Sr) / 10);
-          if (wheelSpeed < 20) wheelSpeed = 20;
-        }
-        motors.setSpeeds(-wheelSpeed, wheelSpeed);
-      } else {
-        motors.setSpeeds(0, 0);
-      }
-
-      prevLeft = countsLeft;
-      prevRight = countsRight;
-      prevMillis = currentMillis;
-
-    }
-
-    turnSensorUpdate();
-    display.gotoXY(0, 0);
-    display.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-    display.print(F("   "));
-
-  }
-
-  delay(2000);
-  Sr = 0;
-  Sl = 0;
-  countsLeft = 0;
-  countsRight = 0;
-  prevLeft = 0;
-  prevRight = 0;
-  prevMillis = 0;
-  currentMillis = 0;
-
-}
-
-void left() {
-
-  delay(500);
-  ang += 90;
-
-  if (ang == 180) {
-    ang = -180;
-  }
-
-  while (ang != (((int32_t)turnAngle >> 16) * 360) >> 16){
-
-    turnSensorUpdate();
-    display.gotoXY(0, 0);
-    display.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-    display.print(F("   "));
-
-    motors.setSpeeds(-30, 30);
-  
-  }
-
-  motors.setSpeeds(0, 0);
-  encoders.getCountsAndResetLeft();
-  encoders.getCountsAndResetRight();
-  turnAngle += 90;
-  delay(2000);
-
-}
-
-void right() {
-
-  delay(500);
-  ang -= 90;
-
-  if (ang == 180) {
-    ang = -180;
-  }
-
-  while (ang != (((int32_t)turnAngle >> 16) * 360) >> 16){
-
-    turnSensorUpdate();
-    display.gotoXY(0, 0);
-    display.print((((int32_t)turnAngle >> 16) * 360) >> 16);
-    display.print(F("   "));
-
-    motors.setSpeeds(30, -30);
-  
-  }
-
-  motors.setSpeeds(0, 0);
-  encoders.getCountsAndResetLeft();
-  encoders.getCountsAndResetRight();
-  turnAngle -= 90;
-  delay(2000);
-
-}
-
-void tdfhd() {
-
-  turnSensorReset();
-  int final = ((((int32_t)turnAngle >> 16) * 360) >> 16) + 90;
-  turnAngle = turnAngle + 90;
-
-  while (final > (((int32_t)turnAngle >> 16) * 360) >> 16){
-
-    turnSensorUpdate();
-
-    int32_t turnSpeed = -(int32_t)turnAngle / (turnAngle1 / 28)
-    - turnRate / 40;
-
-    turnSpeed = constrain(turnSpeed, -maxSpeed, maxSpeed);
-
-    motors.setSpeeds(-turnSpeed, turnSpeed);
-  
-  }
-
-  display.clear();
-  motors.setSpeeds(0, 0);
-  encoders.getCountsAndResetLeft();
-  encoders.getCountsAndResetRight();
-  delay(2000);
-
-}
-
-void checkEncoders() {
-
-  currentMillis = millis();
-
-  if (currentMillis > prevMillis + PERIOD) {
-
-    countsLeft += encoders.getCountsAndResetLeft();
-    countsRight += encoders.getCountsAndResetRight();
-
-    Sl += ((countsLeft - prevLeft) / (CLICKS_PER_ROTATION * GEAR_RATIO) *  WHEEL_CIRCUMFERENCE);
-    Sr += ((countsRight - prevRight) / (CLICKS_PER_ROTATION * GEAR_RATIO) *  WHEEL_CIRCUMFERENCE);
-
-    int wheelSpeed = 50;
-
-    if (Sr < 50){
-      if (Sr > 40){
-        wheelSpeed = 50 * ((30 - Sr) / 10);
-        if (wheelSpeed < 20) wheelSpeed = 20;
-      }
-      motors.setSpeeds(wheelSpeed, wheelSpeed);
-    } else {
-      motors.setSpeeds(0, 0);
-    }
-
-    prevLeft = countsLeft;
-    prevRight = countsRight;
-    prevMillis = currentMillis;
-
-  }
-
-}
-
-
-
-Other Stuff:
-
-
-
-
-// Turnsensor.h provides functions for configuring the
-// 3pi+ 32U4's gyro, calibrating it, and using it to
-// measure how much the robot has turned about its Z axis.
-//
-// This file should be included *once* in your sketch,
-// somewhere after you define objects named buttonA,
-// display, and imu.
-
-#include <Wire.h>
-
-// This constant represents a turn of 45 degrees.
+//GYRO ------------------------------------------------------------------------------------------------------------------------
 const int32_t turnAngle45 = 0x20000000;
 
 // This constant represents a turn of 90 degrees.
@@ -340,13 +62,7 @@ const int32_t turnAngle90 = turnAngle45 * 2;
 
 // This constant represents a turn of approximately 1 degree.
 const int32_t turnAngle1 = (turnAngle45 + 22) / 45;
-
-/* turnAngle is a 32-bit unsigned integer representing the amount
-the robot has turned since the last time turnSensorReset was
-called.  This is computed solely using the Z axis of the gyro, so
-it could be inaccurate if the robot is rotated about the X or Y
-axes.
-
+/*
 Our convention is that a value of 0x20000000 represents a 45
 degree counter-clockwise rotation.  This means that a uint32_t
 can represent any angle between 0 degrees and 360 degrees.  If
@@ -366,7 +82,508 @@ int16_t gyroOffset;
 // This variable helps us keep track of how much time has passed
 // between readings of the gyro.
 uint16_t gyroLastUpdate = 0;
+//DRIVING ------------------------------------------------------------------------------------------------------------------------
+double s1 = 100;
+double s2 = 100;
 
+
+//IR Sensor for Angular Velocity
+
+volatile double eCount = 0;
+volatile double eCount2 = 0;
+volatile double dT = 0;
+volatile double dT2 = 0;
+
+void countL() {
+  eCount= encoders.getCountsLeft();
+  dT = eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
+  // Serial.println(dT);
+}
+void countR() {
+  eCount2 = encoders.getCountsRight();
+  dT2 = eCount2 / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;
+  // Serial.print("\t");
+  // Serial.println(dT2);
+}
+
+
+
+//PATHFINDING
+int currentDistance;  // THIS IS USED TO GLOBALIZE THE ITERATED VALUE FROM THE DISTANCE ARRAY
+
+
+//DRIVING -------------------------------------------------------------------------------------------------------------------
+
+//For every exit command in every move function, step must increment because the motion is inside of the loop
+// UPDATE dRECORD EVERY TIME TOO
+int step = 0;
+
+void update() {
+  encoders.getCountsAndResetLeft();
+  encoders.getCountsAndResetRight();
+  turnSensorReset();
+  turnAngle=0;
+  //dRecord2 = dT2;
+  step++;
+  
+}
+
+void go_fwd() {
+  //debug
+  //Serial.println("forward");
+  int intent = currentDistance;
+  turnSensorUpdate();
+  countL();
+  countR();
+  
+  if (eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE >= intent) {
+    motors.setSpeeds(0, 0);
+    delay(1000);
+    update();
+
+  } else {
+    motors.setSpeeds(s1, s2);
+    // Serial.print(s1);
+    // Serial.print("\t");
+    // Serial.println(s2);
+  }
+}
+void go_bck() {// ONLY OCCURS AT THE END SQUARE
+  /*
+  int intent = currentDistance;
+  mpu6050.update();
+  prevAngle = angle;
+  angle = mpu6050.getAngleZ();
+  if (dT - dRecord >= intent) {
+    go_back(0, 0);
+    delay(1000);
+    update();
+
+  } else {
+    int angDif = round((angle - prevAngle) * 500);
+    if (abs(angDif) > 1) {
+      if (angDif > 0) {
+        s2 += 1;
+        s1 -= 1;
+      } else if (angDif < 0) {
+        s2 -= 1;
+        s1 += 1;
+      }
+    }
+    go_back(s1, s2);
+    // Serial.print(s1);
+    // Serial.print("\t");
+    // Serial.println(s2);
+  } */
+}
+
+void turn_left() {
+  Serial.println("Turn Left");
+  turnSensorUpdate();
+  if ((((int32_t)turnAngle >> 16) * 360) >> 16 >= 90) {
+    motors.setSpeeds(0,0);
+    delay(1000);
+    update();
+  } else {
+    // Serial.print(fAngle);
+    // Serial.print("\t");
+    // Serial.println(angle);
+    motors.setSpeeds(-s1,s2);
+  }
+}
+
+void turn_right() {
+  Serial.println("Turn Right");
+  turnSensorUpdate();
+  if ((((int32_t)turnAngle >> 16) * 360) >> 16 <= -90) {
+    motors.setSpeeds(0,0);
+    delay(1000);
+    update();
+  } else {
+    // Serial.print(fAngle);
+    // Serial.print("\t");
+    // Serial.println(angle);
+    motors.setSpeeds(s1,-s2);
+  }
+}
+
+void fullTurn() {  //will go counterclockwise
+  Serial.println("FullTurn");
+  turnSensorUpdate();
+  if (turnAngle <= -turnAngle90) {
+    motors.setSpeeds(0,0);
+    delay(1000);
+    update();
+  } else {
+    // Serial.print(fAngle);
+    // Serial.print("\t");
+    // Serial.println(angle);
+    motors.setSpeeds(s1,-s2);
+  }
+}
+
+void stop_Stop(){
+  motors.setSpeeds(0,0);
+}
+
+
+
+//PATHFINDING --------------------------------------------------------------------------------------------------------------------
+
+int functionCount = 1;
+void (*functionArray[60])();  // LEFT OFF HERE
+int distance[60];             //should be parallel to functionArray and will use the function Count index
+int prevNode = -1;
+
+void emptyFunction() {  //FILLING FUNCTION ARRAY WITH STOP VALUES
+  functionArray[0] = go_fwd;
+  distance[0] = 11.5+25;
+  for (int i = 1; i < 60; i++) {
+    functionArray[i] = stop_Stop;
+    distance[i] = 45;//BASE DISTANCE
+  }
+}
+
+void printPath(int parent[], int node) {
+  if (parent[node] == -1) {
+    Serial.println(node);
+   // route[routeCount] = node;
+    return;
+  }
+  printPath(parent, parent[node]);
+  Serial.print(" --> ");
+  Serial.println(node);
+
+  //RECORDING NODE PATH TO FUNCTION STEPS
+  Serial.println(node - prevNode);
+  int distanceAdditive = 50; //can Add Calibration Distance 
+  switch (node - prevNode) { 
+    case -1: //left
+      switch(orientation){
+        case 0:
+          functionArray[functionCount] = turn_left;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 1:
+          functionArray[functionCount] = fullTurn;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 2:
+          functionArray[functionCount] = turn_right;
+          functionArray[functionCount+1] = go_fwd; 
+          functionCount++;  
+          break;
+        case 3:
+          //functionArray[functionCount] = ;     
+          distance[functionCount-1] += distanceAdditive;      
+          functionCount--;
+          break;
+        default:
+          //Serial.println(node-prevNode);
+          break;
+      }
+      orientation = 3; //left
+      break;
+    case 1: //right
+      switch(orientation){
+        case 0:
+          functionArray[functionCount] = turn_right;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 1:
+          //functionArray[functionCount] = ;     
+          distance[functionCount-1] += distanceAdditive;    
+          functionCount--;
+          break;
+        case 2:
+          functionArray[functionCount] = turn_left;
+          functionArray[functionCount+1] = go_fwd;  
+          functionCount++; 
+          break;
+        case 3:
+          functionArray[functionCount] = fullTurn;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        default:
+          //Serial.println(node-prevNode);
+          break;
+      }
+      orientation = 1; //right
+      break;
+    case -4://up
+      switch(orientation){
+        case 0:
+          distance[functionCount-1] += distanceAdditive;    
+          functionCount--;
+          break;
+        case 1:
+          functionArray[functionCount] = turn_left;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 2:
+          functionArray[functionCount] = fullTurn;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 3:
+          functionArray[functionCount] = turn_right;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        default:
+          //Serial.println(node-prevNode);
+          break;
+      }
+      orientation = 0;
+      break;
+    case 4:
+      switch(orientation){
+        case 0:
+          functionArray[functionCount] = fullTurn;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 1:
+          functionArray[functionCount] = turn_right;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        case 2:
+          distance[functionCount-1] += distanceAdditive;  
+          functionCount--;
+          break;
+        case 3:
+          functionArray[functionCount] = turn_left;
+          functionArray[functionCount+1] = go_fwd;
+          functionCount++;
+          break;
+        default:
+          //Serial.println(node-prevNode);
+          break;        
+      }
+      orientation = 2;
+      break;
+    default:
+      //Serial.println(node-prevNode);
+      break;
+  }
+  if (node == endPoints[gateCount + 1]){ //The End Square
+    functionArray[functionCount+1] = go_bck;
+    functionCount++;
+    distance[functionCount] = 13;
+  }
+  prevNode = node;
+  functionCount++;  //MOVED HERE SO THAT ANALYSIS COULD TAKE PLACE BEFORE INCREMENT
+}
+
+//Adjacency Matrix
+bool adjMatrix[20][20];
+
+void createMatrix() {
+  //EMPTY MATRIX:
+  for (int a = 0; a < 20; a++) {
+    for (int b = 0; b < 20; b++) {
+      adjMatrix[a][b] = 1;
+    }
+  }
+  //OVERWRITING VALUES
+  for (int a = 0; a < 20; a++) {
+    int i = a / 4;
+    int j = a % 4;
+    String str = maze[i][j];
+    int w = 0;                   //DEFAULT CONNECTION WEIGHT
+    // if (str.indexOf('G') >= 0) {  //IF ITS A GATE ZONE
+    //   w = -16;                    //GATE ZONE CONNECTION WEIGHT
+    // }
+    if (str.indexOf('T') < 0 && i > 0) {  //IF THERE IS NO TOP BARRIER && IS NOT IN THE TOP ROW
+      adjMatrix[4 * (i - 1) + j][4 * i + j] = w;
+      // if (maze[i - 1][j].indexOf('G') >= 0) {  //CHECK IF IT LEADS TO A GATE ZONE
+      //   adjMatrix[4 * (i - 1) + j][4 * i + j] = -16;
+      // }
+    }
+    if (str.indexOf('B') < 0 && i < 4) {  // IF THERE IS NO BOTTOM BARRIER && IS NOT IN THE BOTTOM ROW
+      adjMatrix[4 * (i + 1) + j][4 * i + j] = w;
+      // if (maze[i + 1][j].indexOf('G') >= 0) {  //CHECK IF IT LEADS TO A GATE ZONE
+      //   adjMatrix[4 * (i + 1) + j][4 * i + j] = -16;
+      // }
+    }
+    if (str.indexOf('L') < 0 && j > 0) {  //IF THERE IS NO LEFT BARRIER && IS NOT IN THE LEFT-MOST COLUMN
+      adjMatrix[4 * i + j][4 * i + j - 1] = w;
+      // if (maze[i][j - 1].indexOf('G') >= 0) {  //CHECK IF IT LEADS TO A GATE ZONE
+      //   adjMatrix[4 * i + j][4 * i + j - 1] = -16;
+      // }
+    }
+    if (str.indexOf('R') < 0 && j < 3) {  // IF THERE IS NO RIGHT BARRIER && IS NOT IN THE RIGHT MOST COLUMN
+      adjMatrix[4 * i + j][4 * i + j + 1] = w;
+      // if (maze[i][j + 1].indexOf('G') >= 0) {  //CHECK IF IT LEADS TO A GATE ZONE
+      //   adjMatrix[4 * i + j][4 * i + j + 1] = -16;
+      // }
+    }
+  }
+  
+  for (int a = 0; a < 20; a++) {
+    for (int b = 0; b < 20; b++) {
+      Serial.print(adjMatrix[a][b]);
+      Serial.print("\t");
+     }
+     Serial.println("");//DEBUG CHECKING
+   }
+   
+}
+
+int hCost(int node) {
+  return abs(node % 4 - endNode % 4) + abs(node / 4 - endNode / 4);
+}
+
+void Path() {
+  for (int a = 1; a < gateCount + 2; a++) {
+    endNode = endPoints[a];
+    startNode = endPoints[a - 1];
+    int parent[20];  // Array to store the path
+    for (int i = 0; i < 20; i++) {
+      parent[i] = -1;  // Initialize all nodes as unvisited
+    }
+
+
+    int currentNode = startNode;
+    bool openSet[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    bool closedSet[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    int fCostList[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    openSet[startNode] = 1;
+    //route[routeCount-1] = startNode;
+    prevNode = startNode;
+    while (currentNode != endNode) { 
+      int minCost = INF;
+      for (int i = 0; i < 20; i++) {  //SETTING CURRENT TO NODE IN OPENSET WITH THE LOWEST F COST
+        if (openSet[i]) {
+          if (fCostList[i] <= minCost) {
+            minCost = fCostList[i];
+            currentNode = i;
+            //Serial.println(minCost);
+          }
+        }
+      }
+      openSet[currentNode] = 0;    //removing current from openSet
+      closedSet[currentNode] = 1;  //adding current to closedSet
+
+      if (currentNode == endNode) {
+        break;
+      }
+      //TRAVERSE NEIGHBORS AND CHECK IF THEY ARE IN CLOSED; THEN CHECK IF THE NEW PATH IS
+      if (currentNode > 3) {                                                                                        //TOP
+        //Serial.println("got here 1");
+        if (!(closedSet[currentNode - 4]) && adjMatrix[currentNode][currentNode - 4] < 1) {                         //if neighbor is NOT in closed OR IS traversable
+          Serial.println("got here2");
+          if (adjMatrix[currentNode][currentNode - 4] < fCostList[currentNode - 4] || !openSet[currentNode - 4]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
+            fCostList[currentNode - 4] = adjMatrix[currentNode][currentNode - 4] + hCost(currentNode - 4);
+            parent[currentNode - 4] = currentNode;
+            Serial.println("got here3");
+            if (!openSet[currentNode - 4]) {
+              openSet[currentNode - 4] = true;
+              Serial.println("got here5");
+            }
+          }
+        }
+      }
+      if (currentNode < 16) {                                                                                       //BOTTOM
+        if (!(closedSet[currentNode + 4]) && adjMatrix[currentNode][currentNode + 4] < 1) {                         //if neighbor is NOT in closed OR IS traversable
+        
+          if (adjMatrix[currentNode][currentNode + 4] < fCostList[currentNode + 4] || !openSet[currentNode + 4]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
+            fCostList[currentNode + 4] = adjMatrix[currentNode][currentNode + 4] + hCost(currentNode + 4);
+            parent[currentNode + 4] = currentNode;
+          
+            if (!openSet[currentNode + 4]) {
+              openSet[currentNode + 4] = true;
+              Serial.println("got here3");
+            }
+          }
+        }
+      }
+      if (currentNode % 4 < 3) {                                                                                    //RIGHT
+        if (!(closedSet[currentNode + 1]) && adjMatrix[currentNode][currentNode + 1] < 1) {                         //if neighbor is NOT in closed OR IS traversable
+          if (adjMatrix[currentNode][currentNode + 1] < fCostList[currentNode + 1] || !openSet[currentNode + 1]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
+            fCostList[currentNode + 1] = adjMatrix[currentNode][currentNode + 1] + hCost(currentNode + 1);
+            parent[currentNode + 1] = currentNode;
+            if (!openSet[currentNode + 1]) {
+              openSet[currentNode + 1] = true;
+            }
+          }
+        }
+      }
+      if (currentNode % 4 > 0) {                                                                                    //LEFT
+        if (!(closedSet[currentNode - 1]) && adjMatrix[currentNode][currentNode - 1] < 1) {                         //if neighbor is NOT in closed OR IS traversable
+          if (adjMatrix[currentNode][currentNode - 1] < fCostList[currentNode - 1] || !openSet[currentNode - 1]) {  //if new path to neighbor IS shorter OR neighbor is NOT in OPEN
+            fCostList[currentNode - 1] = adjMatrix[currentNode][currentNode - 1] + hCost(currentNode - 1);
+            parent[currentNode - 1] = currentNode;
+            if (!openSet[currentNode - 1]) {
+              openSet[currentNode - 1] = true;
+            }
+          }
+        }
+      }
+    }
+    if (currentNode == endNode) {
+      Serial.print("Path: ");
+      printPath(parent, endNode);
+    }
+  }
+}
+
+void setup() {
+  delay(1000);
+
+  turnSensorSetup();
+  turnSensorReset();
+
+  createMatrix();
+  emptyFunction();
+  Path();
+  // for(int i = 0; i < 50; i++){
+  //   currentDistance = distance[i];
+  //   functionArray[i]();
+  //   if (functionArray[i] == stop_Stop){
+  //     break;
+  //   }
+  //   Serial.println("");
+  // }
+for (int i = 0 ; i < 50; i++){
+     if (functionArray[i] == go_fwd) {
+     Serial.print("Going fwd ");
+   } else if (functionArray[i] == turn_right) {
+     Serial.print("Turning right ");
+   } else if (functionArray[i] == turn_left) {
+     Serial.print("Turning left ");
+   } else if (functionArray[i] == fullTurn) {
+     Serial.print("Full Turn");
+   }else if (functionArray[i] == stop_Stop){
+     Serial.print("Stop");
+   }else{
+     Serial.print("Else");
+   }
+   Serial.println(currentDistance);
+   }
+   Serial.println("finished");
+delay(5000);
+}
+
+void loop() {
+
+  // put your main code here, to run repeatedly
+  // mpu6050.update();
+  // angle = mpu6050.getAngleZ();
+  // mpu6050.update();
+  // angle = mpu6050.getAngleZ();
+  currentDistance = distance[step];
+  functionArray[step]();
+}
+
+//Pololu included gyro stuff
 
 // This should be called to set the starting point for measuring
 // a turn.  After calling this, turnAngle will be 0.
