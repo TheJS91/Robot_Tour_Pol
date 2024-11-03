@@ -107,7 +107,7 @@ void go_fwd(int intent) {
 void turn_left() {
   Serial.println("Turn Left");
   turnSensorUpdate();
-  while (ang() < 88) {
+  while (ang() < 87) {
     turnSensorUpdate();
     countL();
     countR();
@@ -167,15 +167,14 @@ void setup() {
 
   turnSensorSetup();
   turnSensorReset();
-  go_fwd(30);
-  turn_right();
-  turn_right();
-  turn_right();
-  turn_right();
-  turn_right();
-  turn_right();
-  turn_right();
-  turn_right();
+  turn_left();
+  turn_left();
+  turn_left();
+  turn_left();
+  turn_left();
+  turn_left();
+  turn_left();
+  turn_left();
 
  
 delay(5000);
