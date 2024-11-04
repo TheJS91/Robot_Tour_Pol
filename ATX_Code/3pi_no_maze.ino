@@ -33,8 +33,8 @@ int16_t gyroOffset;
 
 uint16_t gyroLastUpdate = 0;
 //DRIVING ------------------------------------------------------------------------------------------------------------------------
-double s1min = 40; 
-double s2min = 45;
+double s1min = 80; 
+double s2min = 85;
 double Kpf = 1; // to reach the proper distance
 double Kps = 6; //to go straight, only affects right motor
 //turning
@@ -83,7 +83,7 @@ double d1(){return eCount / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFER
 double d2(){return eCount2 / (CLICKS_PER_ROTATION * GEAR_RATIO) * WHEEL_CIRCUMFERENCE;}
 
 
-void go_fwd(int intent) {
+void move_fwd(int intent) {
   //debug
   //Serial.println("forward");
   turnSensorUpdate();
@@ -98,7 +98,7 @@ void go_fwd(int intent) {
 
   } 
     motors.setSpeeds(0, 0);
-    delay(1000);
+    delay(300);
     update();
   
 }
@@ -107,7 +107,7 @@ void go_fwd(int intent) {
 void turn_left() {
   Serial.println("Turn Left");
   turnSensorUpdate();
-  while (ang() < 87) {
+  while (ang() < 87.2) {
     turnSensorUpdate();
     countL();
     countR();
@@ -117,7 +117,7 @@ void turn_left() {
     // Serial.print("\t");
     // Serial.println(angle);
     motors.setSpeeds(0,0);
-    delay(1000);
+    delay(300);
     update();
   
 }
@@ -125,14 +125,14 @@ void turn_left() {
 void turn_right() {
   Serial.println("Turn Right");
   turnSensorUpdate();
-  while (ang() > -88) {
+  while (ang() > -87.3) {
     turnSensorUpdate();
     countL();
     countR();
     motors.setSpeeds(t1min + abs(90 + (ang())) * Kpt, -t2min - abs(90 + (ang())) * Kpt);
   }   // -90 < fullTurn < 0
     motors.setSpeeds(0,0);
-    delay(1000);
+    delay(300);
     update();
     
     
@@ -167,14 +167,43 @@ void setup() {
 
   turnSensorSetup();
   turnSensorReset();
+  move_fwd(30);
+  move_fwd(150);
+  turn_right();
+  move_fwd(150);
+
+  turn_right();
+  turn_right();
+  move_fwd(100);
   turn_left();
+  move_fwd(50);
   turn_left();
+  move_fwd(100);
+
+  turn_right();
+  turn_right();
+  move_fwd(100);
   turn_left();
+  move_fwd(50);
   turn_left();
+  move_fwd(100);
+
+  turn_right();
+  turn_right();
+  move_fwd(150);
   turn_left();
+  move_fwd(50);
   turn_left();
-  turn_left();
-  turn_left();
+  move_fwd(150);
+
+  turn_right();
+  turn_right();
+  move_fwd(150);
+  turn_right();
+  move_fwd(200);
+  turn_right();
+  move_fwd(150);
+
 
  
 delay(5000);
@@ -213,9 +242,14 @@ void turnSensorUpdate()
  
   turnAngle += (int64_t)d * 14680064 / 17578125;
 }
+/*
 int32_t ang(){ return ((((int32_t)turnAngle >> 16) * 360) >> 16);
   }
-
+*/
+double ang()
+{
+  return ((int32_t)turnAngle) * (360.0 / 4294967296.0);
+}
 void turnSensorSetup()
 {
   Wire.begin();
